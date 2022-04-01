@@ -1,4 +1,3 @@
-
 # 说明 : 本脚本提供解析v2ray订阅链接为Clash配置文件的自动化,供学习交流使用.
 # 参数 :
 #     1. url=订阅地址
@@ -8,130 +7,160 @@
 #     - 输入crontab -e编辑定时任务
 #     - 模板: [cron表达式] [python路径] [脚本路径] > [输出日志路径]
 #     - 例子: 0 0 18 * * ? /usr/bin/python3.8 ~/v2ray.py > ~/auto.log
-#     - Arch系也可通过:[cron表达式] systemctl restart clash.service[需自行设置]设置定时任务.在更新订阅后重启Clash-linux 
+#     - Arch系也可通过:[cron表达式] systemctl restart clash.service[需自行设置]设置定时任务.在更新订阅后重启Clash-linux
 
-#属性
-headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36"}
-url = 'https://dy.wmyun.men/link/LET56VNfZlrUwKtg?mu=2'
-user_path = '/home/qianxing/'
-net_config = 'https://raw.githubusercontent.com/Roiocam/V2ray2Clash/master/config.yaml'
-
-#V2ray to Clash
+# 属性
+import os
 import urllib.request
 import base64
 import json
 import datetime
 import yaml
 import sys
-clash_path = '/.config/clash/config.yaml'
+
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36"
+}
+url = "http://127.0.0.1:9000/v2ray.txt"
+username = os.popen("whoami").read().strip()
+user_path = f"/Users/{username}/"
+net_config = "https://raw.githubusercontent.com/lpdswing/V2ray2Clash/master/config.yaml"
+
+# V2ray to Clash
+
+clash_path = ".config/clash/config.yaml"
+
+
 def log(msg):
     time = datetime.datetime.now()
-    print('['+time.strftime('%Y.%m.%d-%H:%M:%S')+']:'+msg)
-#保存到文件
+    print("[" + time.strftime("%Y.%m.%d-%H:%M:%S") + "]:" + msg)
+
+
+# 保存到文件
 def save_to_file(file_name, contents):
-    fh = open(file_name, 'w',encoding="utf-8")
-    fh.write(contents.decode('utf-8'))
+    fh = open(file_name, "w", encoding="utf-8")
+    fh.write(contents.decode("utf-8"))
     fh.close()
-#获取订阅地址数据:
+
+
+# 获取订阅地址数据:
 def get_proxies(url):
-    proxies=[]
-    #请求订阅地址
+    proxies = []
+    # 请求订阅地址
     urllib.request.getproxies()
     urllib.request.ProxyHandler(proxies=None)
-    req = urllib.request.Request(url=url,headers=headers)
-    raw = urllib.request.urlopen(req).read().decode('utf-8')
+    req = urllib.request.Request(url=url, headers=headers)
+    raw = urllib.request.urlopen(req).read().decode("utf-8")
     vmess_raw = base64.b64decode(raw)
     vmess_list = vmess_raw.splitlines()
-    log('已获取'+str(len(vmess_list))+'个节点')
-    #解析vmess链接
+    log("已获取" + str(len(vmess_list)) + "个节点")
+    # 解析vmess链接
     for item in vmess_list:
-        b64_proxy = item.decode('utf-8')[8:]
-        proxy_str = base64.b64decode(b64_proxy).decode('utf-8')
+        b64_proxy = item.decode("utf-8")[8:]
+        proxy_str = base64.b64decode(b64_proxy).decode("utf-8")
         proxies.append(proxy_str)
     return proxies
-#转换成Clash对象
+
+
+# 转换成Clash对象
 def translate_proxy(arr):
-    log('代理节点转换中...')
-    proxies={
-        'proxy_list':[],
-        'proxy_names':[]
-    }
+    log("代理节点转换中...")
+    proxies = {"proxy_list": [], "proxy_names": []}
     for temp in arr:
         item = json.loads(temp)
-        if None == item.get('tls') :
+        if None == item.get("tls"):
             continue
         obj = {
-            'name' : item.get('ps'),
-            'type':'vmess',
-            'server':item.get('add'),
-            'port':item.get('port'),
-            'uuid':item.get('id'),
-            'alterId':item.get('aid'),            
-            'cipher':'auto' if item.get('type') == 'none' else None,
-            'ucp':True,
-            'network':item.get('net'),
-            'ws-path':item.get('path'),
-            'ws-headers':{
-                'Host':item.get('host')
+            "name": item.get("ps"),
+            "type": "vmess",
+            "server": item.get("add"),
+            "port": item.get("port"),
+            "uuid": item.get("id"),
+            "alterId": item.get("aid"),
+            "cipher": "auto",
+            # "cipher": "auto" if item.get("type") == "none" else item.get("type"),
+            "ucp": True,
+            "network": item.get("net"),
+            "ws-opts": {
+                "path": item.get("path"),
+                "headers": {
+                    "host": item.get("host")
+                    },
             },
-            'tls':True if item.get('tls') == 'tls' else None,
+            "tls": True if item.get("tls") == "tls" else None,
         }
         for key in list(obj.keys()):
             if obj.get(key) is None:
                 del obj[key]
-        proxies['proxy_list'].append(obj)
-        proxies['proxy_names'].append(obj['name'])
+        proxies["proxy_list"].append(obj)
+        proxies["proxy_names"].append(obj["name"])
     return proxies
+
+
 def load_local_config(user_path):
     try:
         # path = user_path + clash_path
-        path = './config.yaml'
-        f = open(path, 'r',encoding="utf-8")
-        config = yaml.load(f.read(),Loader=yaml.FullLoader)
+        path = "./config.yaml"
+        f = open(path, "r", encoding="utf-8")
+        config = yaml.load(f.read(), Loader=yaml.FullLoader)
         f.close()
         return config
     except FileNotFoundError:
-        log('配置文件加载失败')
+        log("配置文件加载失败")
         sys.exit()
-#获取规则策略的配置文件
+
+
+# 获取规则策略的配置文件
 def get_github_config(user_path):
     try:
         urllib.request.getproxies()
         urllib.request.ProxyHandler(proxies=None)
         req = urllib.request.Request(url=net_config, headers=headers)
-        raw = urllib.request.urlopen(req).read().decode('utf-8')
-        config = yaml.load(raw,Loader=yaml.FullLoader)
+        raw = urllib.request.urlopen(req).read().decode("utf-8")
+        config = yaml.load(raw, Loader=yaml.FullLoader)
     except BaseException as be:
-        log('网络获取规则配置失败,加载本地配置文件[%s]'%be)
+        log("网络获取规则配置失败,加载本地配置文件[%s]" % be)
         return load_local_config(user_path)
-    log('已获取规则配置文件')
+    log("已获取规则配置文件")
     return config
-#将代理添加到配置文件
-def add_proxies_to_config(data,config):
-    config['proxies']=data['proxy_list']
-    #规则策略的占位符
-    placeholder = ['1','2','3','4']
-    for group in config['proxy-groups']:
-        if group['proxies'] is None:
-            group['proxies'] = data['proxy_names']
-        elif 'DIRECT' == group['proxies'][0]:
-            1==1 # nothing to do
-        else:
-            group['proxies'].extend(data['proxy_names'])
-    return config
-#保存配置文件
-def save_config(user_path,config_data):
-    path = user_path + clash_path
-    lenth = len(config_data['proxies'])
-    config = yaml.dump(config_data,sort_keys=False,default_flow_style=False,encoding='utf-8',allow_unicode=True)
-    save_to_file(path,config)
-    log('成功更新:'+str(lenth)+'个节点')
 
-#程序入口
-reload(sys)
-sys.setdefaultencoding('utf-8')
+
+# 将代理添加到配置文件
+def add_proxies_to_config(data, config):
+    config["proxies"] = data["proxy_list"]
+    # 规则策略的占位符
+    placeholder = ["1", "2", "3", "4"]
+    for group in config["proxy-groups"]:
+        if group["proxies"] is None:
+            group["proxies"] = data["proxy_names"]
+        elif "DIRECT" == group["proxies"][0]:
+            1 == 1  # nothing to do
+        else:
+            group["proxies"].extend(data["proxy_names"])
+    return config
+
+
+# 保存配置文件
+def save_config(user_path, config_data):
+    path = user_path + clash_path
+    lenth = len(config_data["proxies"])
+    config = yaml.dump(
+        config_data,
+        sort_keys=False,
+        default_flow_style=False,
+        encoding="utf-8",
+        allow_unicode=True,
+    )
+    save_to_file(path, config)
+    log("成功更新:" + str(lenth) + "个节点")
+
+
+# 程序入口
+# reload(sys)
+# sys.setdefaultencoding('utf-8')
 config_raw = get_github_config(user_path)
 proxy_raw = get_proxies(url)
 proxy = translate_proxy(proxy_raw)
-config = add_proxies_to_config(proxy,config_raw)
-save_config(user_path,config)
+config = add_proxies_to_config(proxy, config_raw)
+save_config(user_path, config)
